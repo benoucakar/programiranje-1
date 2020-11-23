@@ -1,5 +1,7 @@
 import csv
 import os
+import requests
+import re
 
 ###############################################################################
 # Najprej definirajmo nekaj pomožnih orodij za pridobivanje podatkov s spleta.
@@ -8,11 +10,11 @@ import os
 # definiratje URL glavne strani bolhe za oglase z mačkami
 cats_frontpage_url = 'http://www.bolha.com/zivali/male-zivali/macke/'
 # mapa, v katero bomo shranili podatke
-cat_directory = 'TODO'
+cat_directory = 'zajeti_podatki'
 # ime datoteke v katero bomo shranili glavno stran
-frontpage_filename = 'TODO'
+frontpage_filename = 'index.html'
 # ime CSV datoteke v katero bomo shranili podatke
-csv_filename = 'TODO'
+csv_filename = 'macke.csv'
 
 
 def download_url_to_string(url):
@@ -21,13 +23,21 @@ def download_url_to_string(url):
     """
     try:
         # del kode, ki morda sproži napako
-        page_content = 'TODO'
-    except 'TODO':
+        page_content = requests.get(url) 
+    except requests.exceptions.ConnectionError: # Exceptions bi ulovil vse možne napake, npr. da koda ni dobro napisana, napake pri izvajanju, napačen html
         # koda, ki se izvede pri napaki
         # dovolj je če izpišemo opozorilo in prekinemo izvajanje funkcije
-        raise NotImplementedError()
+        print(f"Napaka pri povezovanju na {url}")
+        return None
     # nadaljujemo s kodo če ni prišlo do napake
-    raise NotImplementedError()
+
+    # satus code nam pove kak je bil odgovor [200], [300] itd. 
+    # requests.codes.ok so vsi tisti, ki so dobri
+    if page_content.status_code == requests.codes.ok: 
+        return page_content.text
+    else:
+        print(f"Napaka pri prenosu strani {url}")
+        return None
 
 
 def save_string_to_file(text, directory, filename):
@@ -48,7 +58,12 @@ def save_string_to_file(text, directory, filename):
 def save_frontpage(page, directory, filename):
     """Funkcija shrani vsebino spletne strani na naslovu "page" v datoteko
     "directory"/"filename"."""
-    raise NotImplementedError()
+
+    html = download_url_to_string(page)
+    if html: # različno od None
+        save_string_to_file(html, directory, filename)
+    return None
+    
 
 
 ###############################################################################
@@ -58,7 +73,8 @@ def save_frontpage(page, directory, filename):
 
 def read_file_to_string(directory, filename):
     """Funkcija vrne celotno vsebino datoteke "directory"/"filename" kot niz"""
-    raise NotImplementedError()
+    with open(os.path.join(directory, filename), encoding="utf-8") as f: #os.path... spravi na prav directory, Nastavit encoding
+        return f.read()
 
 
 # Definirajte funkcijo, ki sprejme niz, ki predstavlja vsebino spletne strani,
@@ -70,7 +86,9 @@ def read_file_to_string(directory, filename):
 def page_to_ads(page_content):
     """Funkcija poišče posamezne ogllase, ki se nahajajo v spletni strani in
     vrne njih seznam"""
-    raise NotImplementedError()
+    pattern = re.compile(r'<li class="EntityList-item EntityList-item--Regular(.*?)</article>', re.DOTALL)
+    ads = re.findall(pattern, page_content)
+    return ads
 
 
 # Definirajte funkcijo, ki sprejme niz, ki predstavlja oglas, in izlušči
@@ -81,7 +99,10 @@ def get_dict_from_ad_block(block):
     """Funkcija iz niza za posamezen oglasni blok izlušči podatke o imenu, ceni
     in opisu ter vrne slovar, ki vsebuje ustrezne podatke
     """
-    raise NotImplementedError()
+    pattern = r'alt="(?P<naslov_oglasa>(.*?))"' # groupdict
+    result = re.search(pattern, block, re.DOTALL)
+    return result.groupdict()
+
 
 
 # Definirajte funkcijo, ki sprejme ime in lokacijo datoteke, ki vsebuje
@@ -92,8 +113,12 @@ def get_dict_from_ad_block(block):
 def ads_from_file(filename, directory):
     """Funkcija prebere podatke v datoteki "directory"/"filename" in jih
     pretvori (razčleni) v pripadajoč seznam slovarjev za vsak oglas posebej."""
-    raise NotImplementedError()
+    data = read_file_to_string(directory, filename)
+    ad_blocks = page_to_ads(data)
 
+    return [
+        get_dict_from_ad_block(ad) for ad in ad_blocks
+    ]
 
 ###############################################################################
 # Obdelane podatke želimo sedaj shraniti.
@@ -107,12 +132,12 @@ def write_csv(fieldnames, rows, directory, filename):
     """
     os.makedirs(directory, exist_ok=True)
     path = os.path.join(directory, filename)
-    with open(path, 'w') as csv_file:
+    with open(path, 'w', encoding='utf-8') as csv_file:
         writer = csv.DictWriter(csv_file, fieldnames=fieldnames)
         writer.writeheader()
         for row in rows:
             writer.writerow(row)
-    return
+    return None
 
 
 # Definirajte funkcijo, ki sprejme neprazen seznam slovarjev, ki predstavljajo
@@ -130,8 +155,8 @@ def write_cat_ads_to_csv(ads, directory, filename):
     # Če drži se program normalno izvaja, drugače pa sproži napako
     # Prednost je v tem, da ga lahko pod določenimi pogoji izklopimo v
     # produkcijskem okolju
-    assert ads and (all(j.keys() == ads[0].keys() for j in ads))
-    raise NotImplementedError()
+    assert ads and (all(j.keys() == ads[0].keys() for j in ads)) # ads ni None in ključ ni None
+    write_csv(ads[0].keys(), ads, directory, filename)
 
 
 # Celoten program poženemo v glavni funkciji
@@ -142,19 +167,19 @@ def main(redownload=True, reparse=True):
     2. Lokalno html datoteko pretvori v lepšo predstavitev podatkov
     3. Podatke shrani v csv datoteko
     """
-    # Najprej v lokalno datoteko shranimo glavno stran
-
+    # Najprej v lokalno datoteko shranimo glavno stran # to rabimo shranit samo enkrat
+            # save_frontpage(cats_frontpage_url, cat_directory, frontpage_filename)
     # Iz lokalne (html) datoteke preberemo podatke
 
+    sez_ads = ads_from_file(frontpage_filename, cat_directory)
+
     # Podatke prebermo v lepšo obliko (seznam slovarjev)
-
+        # Naret v ads_from_file
     # Podatke shranimo v csv datoteko
-
+    write_cat_ads_to_csv(sez_ads, cat_directory, csv_filename)
     # Dodatno: S pomočjo parameteov funkcije main omogoči nadzor, ali se
     # celotna spletna stran ob vsakem zagon prense (četudi že obstaja)
     # in enako za pretvorbo
-
-    raise NotImplementedError()
 
 
 if __name__ == '__main__':
